@@ -6,6 +6,7 @@ import postsRouter from './routes/posts-route';
 import communitiesRouter from './routes/communities-route';
 import bookmarksRouter from './routes/bookmarks-route';
 import messagesRouter from './routes/messages-route';
+import notificationsRouter from './routes/notifications-route';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +21,7 @@ app.use('/api', postsRouter);
 app.use('/api', communitiesRouter);
 app.use('/api', bookmarksRouter);
 app.use('/api', messagesRouter);
+app.use('/api', notificationsRouter);
 
 app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'Hello World' });
