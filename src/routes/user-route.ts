@@ -12,7 +12,7 @@ import {
   getFollowing, 
   getUserPosts,
   logoutUser, 
-  logoutAllDevices 
+  logoutAllDevices
 } from '../services/user-service';
 import { authMiddleware } from '../middleware/auth-middleware';
 import { getPaginationMetadata } from '../utils/pagination';
