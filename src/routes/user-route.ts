@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { registerUser, loginUser } from '../services/user-service';
+import { registerUser, loginUser, getCurrentUser } from '../services/user-service';
+import { authMiddleware } from '../middleware/auth-middleware';
 
 const router = Router();
 
@@ -42,6 +43,28 @@ router.post('/login', async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error.message === 'Email atau password salah') {
       res.status(401).json({ error: error.message });
+      return;
+    }
+
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+  }
+});
+
+router.get('/user', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId;
+    
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const user = await getCurrentUser(userId);
+
+    res.status(200).json({ data: user });
+  } catch (error: any) {
+    if (error.message === 'Unauthorized') {
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
