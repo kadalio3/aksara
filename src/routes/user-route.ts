@@ -1,6 +1,21 @@
 import { Router, Request, Response } from 'express';
-import { registerUser, loginUser, getCurrentUser, logoutUser, logoutAllDevices } from '../services/user-service';
+import { 
+  registerUser, 
+  loginUser, 
+  getMe, 
+  getUserByUsername, 
+  updateAccount, 
+  updateProfile, 
+  deleteAccount, 
+  searchUsers, 
+  getFollowers, 
+  getFollowing, 
+  getUserPosts,
+  logoutUser, 
+  logoutAllDevices 
+} from '../services/user-service';
 import { authMiddleware } from '../middleware/auth-middleware';
+import { getPaginationMetadata } from '../utils/pagination';
 
 const router = Router();
 
@@ -44,15 +59,14 @@ router.post('/register', async (req: Request, res: Response) => {
 
     await registerUser(username, email, password);
     
-    res.status(201).json({ data: 'user berhasil dibuat' });
+    res.status(201).json({ success: true, data: 'user berhasil dibuat' });
   } catch (error: any) {
-    // 409 Conflict cocok untuk resource duplikat (Email/Username sudah terdaftar)
     if (error.message === 'Email telah terdaftar' || error.message === 'Username telah terdaftar') {
-      res.status(409).json({ error: error.message });
+      res.status(409).json({ success: false, error: { code: 'DUPLICATE_ENTRY', message: error.message } });
       return;
     }
     
-    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
 
@@ -67,36 +81,161 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const token = await loginUser(email, password);
 
-    res.status(200).json({ data: token });
+    res.status(200).json({ success: true, data: token });
   } catch (error: any) {
-    if (error.message === 'Email atau password salah') {
-      res.status(401).json({ error: error.message });
+    if (error.message === 'Email atau password salah' || error.message === 'Akun telah dinonaktifkan') {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: error.message } });
       return;
     }
 
-    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
 
-router.get('/user', authMiddleware, async (req: Request, res: Response) => {
+router.get('/users/me', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = res.locals.userId;
-    
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const user = await getCurrentUser(userId);
-
-    res.status(200).json({ data: user });
+    const user = await getMe(userId);
+    res.status(200).json({ success: true, data: user });
   } catch (error: any) {
-    if (error.message === 'Unauthorized') {
-      res.status(401).json({ error: 'Unauthorized' });
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.patch('/users/me', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId;
+    const { username, is_private } = req.body;
+
+    const user = await updateAccount(userId, { username, is_private });
+
+    res.status(200).json({
+      success: true,
+      message: "Akun berhasil diperbarui",
+      data: user
+    });
+  } catch (error: any) {
+    if (error.message === 'Username sudah digunakan') {
+      res.status(409).json({ success: false, error: { code: 'DUPLICATE_ENTRY', message: error.message } });
+      return;
+    }
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.patch('/users/me/profile', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId;
+    const profileData = req.body;
+
+    const profile = await updateProfile(userId, profileData);
+
+    res.status(200).json({
+      success: true,
+      message: "Profil berhasil diperbarui",
+      data: profile
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.delete('/users/me', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId;
+    const { password } = req.body;
+
+    if (!password) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password konfirmasi wajib diisi' } });
       return;
     }
 
-    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+    await deleteAccount(userId, password);
+
+    res.status(200).json({
+      success: true,
+      message: "Akun berhasil dihapus"
+    });
+  } catch (error: any) {
+    if (error.message === 'Password salah') {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: error.message } });
+      return;
+    }
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.get('/users/search', async (req: Request, res: Response) => {
+  try {
+    const q = req.query.q as string || '';
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
+
+    const { users, total } = await searchUsers(q, page, limit);
+    const pagination = getPaginationMetadata(total, page, limit);
+
+    res.status(200).json({ success: true, data: users, pagination });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.get('/users/:username', async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const user = await getUserByUsername(username);
+    res.status(200).json({ success: true, data: user });
+  } catch (error: any) {
+    if (error.message === 'User tidak ditemukan') {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: error.message } });
+      return;
+    }
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.get('/users/:username/followers', async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
+
+    const { followers, total } = await getFollowers(username, page, limit);
+    const pagination = getPaginationMetadata(total, page, limit);
+
+    res.status(200).json({ success: true, data: followers, pagination });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.get('/users/:username/following', async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
+
+    const { following, total } = await getFollowing(username, page, limit);
+    const pagination = getPaginationMetadata(total, page, limit);
+
+    res.status(200).json({ success: true, data: following, pagination });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
+  }
+});
+
+router.get('/users/:username/posts', async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
+
+    const { posts, total } = await getUserPosts(username, page, limit);
+    const pagination = getPaginationMetadata(total, page, limit);
+
+    res.status(200).json({ success: true, data: posts, pagination });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
 
@@ -106,6 +245,7 @@ router.post('/users/logout/all', authMiddleware, async (req: Request, res: Respo
     const count = await logoutAllDevices(userId);
 
     res.status(200).json({
+      success: true,
       data: {
         message: "Semua device berhasil logout",
         sessions_revoked: count
@@ -123,6 +263,7 @@ router.post('/users/logout', authMiddleware, async (req: Request, res: Response)
     await logoutUser(token);
 
     res.status(200).json({
+      success: true,
       data: { message: "logout berhasil" }
     });
   } catch (error: any) {
