@@ -41,6 +41,10 @@ router.post('/communities', authMiddleware, async (req: Request, res: Response) 
       res.status(409).json({ success: false, error: { code: 'DUPLICATE_ENTRY', message: "Slug komunitas sudah digunakan" } });
       return;
     }
+    if (error.message.includes('Format slug tidak valid')) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: error.message } });
+      return;
+    }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
   }
 });
@@ -160,8 +164,12 @@ router.patch('/communities/:slug/members/:userId', authMiddleware, async (req: R
     const result = await updateMemberRole(req.params.slug, req.params.userId, req.body.role, res.locals.userId);
     res.status(200).json({ success: true, message: "Role anggota berhasil diubah", data: { user_id: result.user_id, role: result.role } });
   } catch (error: any) {
-    if (error.message === 'Hanya admin yang bisa mengubah role anggota') {
+    if (error.message.includes('Hanya admin') || error.message.includes('Hanya pemilik')) {
       res.status(403).json({ success: false, error: { code: 'INSUFFICIENT_ROLE', message: error.message } });
+      return;
+    }
+    if (error.message === 'Anggota target tidak ditemukan') {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: error.message } });
       return;
     }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
@@ -173,8 +181,12 @@ router.delete('/communities/:slug/members/:userId', authMiddleware, async (req: 
     await removeMember(req.params.slug, req.params.userId, res.locals.userId);
     res.status(200).json({ success: true, message: "Anggota berhasil dikeluarkan dari komunitas" });
   } catch (error: any) {
-    if (error.message.includes('Hanya admin')) {
+    if (error.message.includes('Hanya admin') || error.message.includes('Moderator tidak punya izin') || error.message.includes('Hanya pemilik')) {
       res.status(403).json({ success: false, error: { code: 'INSUFFICIENT_ROLE', message: error.message } });
+      return;
+    }
+    if (error.message === 'Anggota target tidak ditemukan') {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: error.message } });
       return;
     }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
@@ -192,6 +204,10 @@ router.post('/communities/:slug/posts', authMiddleware, async (req: Request, res
   } catch (error: any) {
     if (error.message.includes('Kamu harus bergabung')) {
       res.status(403).json({ success: false, error: { code: 'NOT_MEMBER', message: error.message } });
+      return;
+    }
+    if (error.message.includes('Konten tidak boleh') || error.message.includes('maksimal 2000')) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: error.message } });
       return;
     }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
@@ -268,6 +284,10 @@ router.post('/communities/:slug/posts/:postId/replies', authMiddleware, async (r
     const reply = await createCommunityReply(res.locals.userId, req.params.postId, req.body.content);
     res.status(201).json({ success: true, message: "Reply berhasil ditambahkan", data: reply });
   } catch (error: any) {
+    if (error.message.includes('Konten tidak boleh') || error.message.includes('maksimal 1000')) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: error.message } });
+      return;
+    }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
   }
 });

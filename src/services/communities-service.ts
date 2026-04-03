@@ -6,6 +6,10 @@ import { CommunityRole, CommunityVisibility, CommunityReactionType, CommunityRea
 // ─────────────────────────────────────────────
 
 export const createCommunity = async (userId: string, data: { name: string; slug: string; description?: string; visibility?: CommunityVisibility }) => {
+  if (!/^[a-z0-9-]+$/.test(data.slug)) {
+    throw new Error('Format slug tidak valid (hanya alphanumeric dan tanda hubung)');
+  }
+
   return await prisma.$transaction(async (tx) => {
     const community = await tx.community.create({
       data: {
@@ -112,7 +116,29 @@ export const deleteCommunity = async (slug: string, userId: string) => {
     throw new Error('Hanya pemilik yang bisa menghapus komunitas');
   }
 
-  await prisma.community.delete({ where: { id: community.id } });
+  await prisma.$transaction(async (tx) => {
+    // Hapus relasi secara berurutan untuk menghindari constraint error
+    await tx.communityMember.deleteMany({ where: { community_id: community.id } });
+    
+    // CommunityPost akan dihapus, namun replies dan reactions terkait harus dibersihkan dulu
+    const posts = await tx.communityPost.findMany({ where: { community_id: community.id } });
+    const postIds = posts.map(p => p.id);
+
+    await tx.communityReaction.deleteMany({
+      where: { 
+        OR: [
+          { content_type: 'community_post', content_id: { in: postIds } },
+          { content_type: 'community_post_reply' } // Ini bisa dioptimasi tapi demi keamanan kita cek postIds
+        ]
+      }
+    });
+
+    await tx.communityPostReply.deleteMany({ where: { community_post_id: { in: postIds } } });
+    await tx.communityPost.deleteMany({ where: { community_id: community.id } });
+    
+    // Akhirnya hapus komunitasnya
+    await tx.community.delete({ where: { id: community.id } });
+  });
 };
 
 // ─────────────────────────────────────────────
@@ -198,16 +224,28 @@ export const updateMemberRole = async (slug: string, targetUserId: string, role:
   const community = await prisma.community.findUnique({ where: { slug } });
   if (!community) throw new Error('Komunitas tidak ditemukan');
 
-  const currentUserMember = await prisma.communityMember.findUnique({
-    where: { user_id_community_id: { user_id: userId, community_id: community.id } },
-  });
+  const [currentUserMember, targetMember] = await Promise.all([
+    prisma.communityMember.findUnique({
+      where: { user_id_community_id: { user_id: userId, community_id: community.id } },
+    }),
+    prisma.communityMember.findUnique({
+      where: { user_id_community_id: { user_id: targetUserId, community_id: community.id } },
+    })
+  ]);
 
   if (!currentUserMember || currentUserMember.role !== 'admin') {
     throw new Error('Hanya admin yang bisa mengubah role anggota');
   }
 
+  if (!targetMember) throw new Error('Anggota target tidak ditemukan');
+
+  // Hierarki: Hanya Owner yang bisa men-demote Admin, atau mengubah role Admin lain
+  if (targetMember.role === 'admin' && community.owner_id !== userId) {
+    throw new Error('Hanya pemilik komunitas yang bisa mengubah hak akses Admin');
+  }
+
   return await prisma.communityMember.update({
-    where: { user_id_community_id: { user_id: targetUserId, community_id: community.id } },
+    where: { id: targetMember.id },
     data: { role },
   });
 };
@@ -216,17 +254,40 @@ export const removeMember = async (slug: string, targetUserId: string, userId: s
   const community = await prisma.community.findUnique({ where: { slug } });
   if (!community) throw new Error('Komunitas tidak ditemukan');
 
-  const currentUserMember = await prisma.communityMember.findUnique({
-    where: { user_id_community_id: { user_id: userId, community_id: community.id } },
-  });
+  const [currentUserMember, targetMember] = await Promise.all([
+    prisma.communityMember.findUnique({
+      where: { user_id_community_id: { user_id: userId, community_id: community.id } },
+    }),
+    prisma.communityMember.findUnique({
+      where: { user_id_community_id: { user_id: targetUserId, community_id: community.id } },
+    })
+  ]);
 
-  if (!currentUserMember || (currentUserMember.role !== 'admin' && currentUserMember.role !== 'moderator')) {
+  if (!currentUserMember) throw new Error('Kamu bukan anggota komunitas ini');
+  if (!targetMember) throw new Error('Anggota target tidak ditemukan');
+
+  // Cek Hierarki
+  const isOwner = community.owner_id === userId;
+  const isAdmin = currentUserMember.role === 'admin';
+  const isMod = currentUserMember.role === 'moderator';
+
+  // Moderator tidak bisa kick Admin atau Moderator lain
+  if (isMod && (targetMember.role === 'admin' || targetMember.role === 'moderator')) {
+    throw new Error('Moderator tidak punya izin untuk mengeluarkan Admin atau Moderator lain');
+  }
+
+  // Admin (bukan owner) tidak bisa kick sesama Admin
+  if (isAdmin && !isOwner && targetMember.role === 'admin') {
+    throw new Error('Hanya pemilik komunitas yang bisa mengeluarkan Admin');
+  }
+
+  if (!isAdmin && !isMod) {
     throw new Error('Hanya admin atau moderator yang bisa mengeluarkan anggota');
   }
 
   await prisma.$transaction(async (tx) => {
     await tx.communityMember.delete({
-      where: { user_id_community_id: { user_id: targetUserId, community_id: community.id } },
+      where: { id: targetMember.id },
     });
 
     await tx.community.update({
@@ -241,6 +302,9 @@ export const removeMember = async (slug: string, targetUserId: string, userId: s
 // ─────────────────────────────────────────────
 
 export const createCommunityPost = async (slug: string, userId: string, data: { content: string; type?: CommunityPostType; flair?: string }) => {
+  if (!data.content || data.content.trim().length === 0) throw new Error('Konten tidak boleh kosong');
+  if (data.content.length > 2000) throw new Error('Konten maksimal 2000 karakter');
+
   const community = await prisma.community.findUnique({ where: { slug } });
   if (!community) throw new Error('Komunitas tidak ditemukan');
 
@@ -449,6 +513,9 @@ export const deleteCommunityPostReaction = async (userId: string, postId: string
 // ─────────────────────────────────────────────
 
 export const createCommunityReply = async (userId: string, postId: string, content: string, parentReplyId: string | null = null) => {
+  if (!content || content.trim().length === 0) throw new Error('Konten tidak boleh kosong');
+  if (content.length > 1000) throw new Error('Balasan maksimal 1000 karakter');
+
   const post = await prisma.communityPost.findUnique({ where: { id: postId } });
   if (!post) throw new Error('Post tidak ditemukan');
 
