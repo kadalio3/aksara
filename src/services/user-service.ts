@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 export const registerUser = async (username: string, email: string, password_string: string) => {
   // 1. Cek email unik
@@ -98,7 +96,7 @@ export const getCurrentUser = async (userId: string) => {
 };
 
 export const logoutUser = async (token: string) => {
-  await prisma.session.delete({
+  await prisma.session.deleteMany({
     where: { token },
   });
 };

@@ -78,34 +78,27 @@ router.post('/users/logout/all', authMiddleware, async (req: Request, res: Respo
     const count = await logoutAllDevices(userId);
 
     res.status(200).json({
-      success: true,
-      message: "Semua device berhasil logout",
-      data: { sessions_revoked: count }
+      data: {
+        message: "Semua device berhasil logout",
+        sessions_revoked: count
+      }
     });
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: { code: "InternalServerError", message: "Terjadi kesalahan sistem" }
-    });
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
   }
 });
 
 router.post('/users/logout', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader?.split(' ')[1] as string; // Already validated in middleware
+    const token = res.locals.token;
 
     await logoutUser(token);
 
     res.status(200).json({
-      success: true,
-      message: "logout berhasil"
+      data: { message: "logout berhasil" }
     });
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: { code: "InternalServerError", message: "Terjadi kesalahan sistem" }
-    });
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
   }
 });
 
