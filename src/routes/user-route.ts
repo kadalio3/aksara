@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { registerUser, loginUser, getCurrentUser } from '../services/user-service';
+import { registerUser, loginUser, getCurrentUser, logoutUser, logoutAllDevices } from '../services/user-service';
 import { authMiddleware } from '../middleware/auth-middleware';
 
 const router = Router();
@@ -68,6 +68,36 @@ router.get('/user', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+  }
+});
+
+router.post('/users/logout/all', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.userId;
+    const count = await logoutAllDevices(userId);
+
+    res.status(200).json({
+      data: {
+        message: "Semua device berhasil logout",
+        sessions_revoked: count
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+  }
+});
+
+router.post('/users/logout', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const token = res.locals.token;
+
+    await logoutUser(token);
+
+    res.status(200).json({
+      data: { message: "logout berhasil" }
+    });
+  } catch (error: any) {
     res.status(500).json({ error: 'Terjadi kesalahan sistem' });
   }
 });

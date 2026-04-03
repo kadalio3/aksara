@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -25,10 +23,11 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     // Mengikat ID milik user ke variable lokal
     res.locals.userId = session.user_id;
+    res.locals.token = token;
 
     next();
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan autotentikasi server' });
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
     return;
   }
 };
