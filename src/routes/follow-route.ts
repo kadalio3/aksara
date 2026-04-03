@@ -32,8 +32,8 @@ router.post('/follows/:userId', authMiddleware, async (req: Request, res: Respon
       res.status(400).json({ success: false, error: { code: 'SELF_FOLLOW', message: error.message } });
       return;
     }
-    if (error.message === 'Kamu sudah mengikuti user ini') {
-      res.status(409).json({ success: false, error: { code: 'ALREADY_FOLLOWING', message: error.message } });
+    if (error.code === 'P2002' || error.message === 'Kamu sudah mengikuti user ini') {
+      res.status(409).json({ success: false, error: { code: 'ALREADY_FOLLOWING', message: 'Kamu sudah mengikuti user ini' } });
       return;
     }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
@@ -52,8 +52,8 @@ router.delete('/follows/:userId', authMiddleware, async (req: Request, res: Resp
       message: "Berhasil berhenti mengikuti user"
     });
   } catch (error: any) {
-    if (error.message === 'Kamu tidak mengikuti user ini') {
-      res.status(409).json({ success: false, error: { code: 'NOT_FOLLOWING', message: error.message } });
+    if (error.code === 'P2025' || error.message === 'Kamu tidak mengikuti user ini') {
+      res.status(409).json({ success: false, error: { code: 'NOT_FOLLOWING', message: 'Kamu tidak mengikuti user ini' } });
       return;
     }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
