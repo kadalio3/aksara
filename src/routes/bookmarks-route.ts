@@ -23,6 +23,10 @@ router.post('/bookmarks', authMiddleware, async (req: Request, res: Response) =>
       res.status(409).json({ success: false, error: { code: 'ALREADY_BOOKMARKED', message: "Konten ini sudah ada di bookmark kamu" } });
       return;
     }
+    if (error.message === 'FORBIDDEN_PRIVATE_CONTENT') {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: "Kamu tidak memiliki akses ke komunitas ini" } });
+      return;
+    }
     if (error.message.includes('tidak ditemukan')) {
       res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: error.message } });
       return;

@@ -14,8 +14,19 @@ export const addBookmark = async (userId: string, data: { content_type: Bookmark
     const post = await prisma.post.findUnique({ where: { id: content_id } });
     if (!post || post.is_deleted) throw new Error('Konten post tidak ditemukan atau sudah dihapus');
   } else if (content_type === 'community_post') {
-    const communityPost = await prisma.communityPost.findUnique({ where: { id: content_id } });
+    const communityPost = await prisma.communityPost.findUnique({ 
+      where: { id: content_id },
+      include: { community: { select: { visibility: true, id: true } } }
+    });
     if (!communityPost || communityPost.is_deleted) throw new Error('Konten community_post tidak ditemukan atau sudah dihapus');
+    
+    // Validasi Akses Private Community
+    if (communityPost.community.visibility === 'private') {
+      const isMember = await prisma.communityMember.findUnique({
+        where: { user_id_community_id: { user_id: userId, community_id: communityPost.community.id } }
+      });
+      if (!isMember) throw new Error('FORBIDDEN_PRIVATE_CONTENT');
+    }
   } else {
     throw new Error('Tipe konten tidak valid (post/community_post)');
   }
@@ -71,7 +82,7 @@ export const getBookmarks = async (userId: string, page: number = 1, limit: numb
 
   const [posts, communityPosts] = await Promise.all([
     prisma.post.findMany({
-      where: { id: { in: postIds }, is_deleted: false },
+      where: { id: { in: postIds } },
       include: { 
         author: { 
           select: { username: true, profile: { select: { display_name: true, avatar_url: true } } } 
@@ -79,7 +90,7 @@ export const getBookmarks = async (userId: string, page: number = 1, limit: numb
       }
     }),
     prisma.communityPost.findMany({
-      where: { id: { in: communityPostIds }, is_deleted: false },
+      where: { id: { in: communityPostIds } },
       include: { 
         author: { 
           select: { username: true, profile: { select: { display_name: true, avatar_url: true } } } 
