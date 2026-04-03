@@ -32,7 +32,11 @@ export const registerUser = async (username: string, email: string, password_str
         create: {}, // akan membuat record kosong dengan ID relasional user yang sesuai
       },
     },
-    include: {
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      created_at: true,
       UserProfile: true,
     },
   });
@@ -48,6 +52,10 @@ export const loginUser = async (email: string, password_string: string) => {
 
   if (!user) {
     throw new Error('Email atau password salah');
+  }
+
+  if (!user.is_active) {
+    throw new Error('Akun telah dinonaktifkan');
   }
 
   // 2. Bandingkan password

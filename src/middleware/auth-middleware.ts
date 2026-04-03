@@ -27,7 +27,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan autotentikasi server' });
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
     return;
   }
 };
