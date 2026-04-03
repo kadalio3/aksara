@@ -1,3 +1,16 @@
+# Issue: Modul User Lengkap (Profile, Search, Follows, Posts & Settings)
+
+## Deskripsi
+
+Meluaskan fungsionalitas modul _Users_ untuk mencakup pengambilan detail publik melalui parameter `username`, pencarian dinamis user, update profile, pengelolaan follower/following, postingan, serta penghapusan akun. Fitur ini dirancang sangat komprehensif, terstruktur, dan terbagi secara rapi untuk dieksekusi.
+
+---
+
+## 1. Pembaruan Schema Database
+
+Schema saat ini kemungkinan besar belum mengekspos tabel relasi yang memadai untuk memenuhi API Post, Search, Follows dsb. Oleh karena itu, *Langkah Pertama* dalam pengerjaan ini adalah mengubah isi dari file `prisma/schema.prisma` menjadi skema terpusat berikut:
+
+```prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -319,7 +332,7 @@ model CommunityPostReply {
   community_post_id String
   user_id           String
   parent_reply_id   String?
-  content         String   @db.Text
+  content           String   @db.Text
   media_urls        Json?
   upvote_count      Int      @default(0)
   downvote_count    Int      @default(0)
@@ -521,3 +534,81 @@ model ActivityLog {
   @@index([created_at])
   @@map("activity_logs")
 }
+```
+
+JANGAN LUPA mengeksekusi sinkronisasi dengan database:
+```bash
+npx prisma db push
+npx prisma generate
+```
+
+---
+
+## 2. Spesifikasi API Endpoint
+
+Gunakan hasil sinkronisasi schema di atas untuk merakit 9 Routing Data.
+
+### GET /users/:username
+- **Header**: Tidak perlu (publik)
+- Mengembalikan detail spesifik profile milik parameter `:username` (relasi `profile`).
+- Harus return struktur valid sesuai Issue / `404 Not Found`.
+
+### GET /users/me
+- **Header**: `Authorization: Bearer <token>`
+- Ambil properti _Profile_ user yang diotentikasi. Mirip routing publik tetapi mengembalikan metadata logistik berlebihan (`email`, `birth_date`).
+
+### PATCH /users/me
+- **Header**: `Authorization: Bearer <token>`
+- Merubah konfigurasi base-account: `username` atau `is_private`.
+- Mencegah bentrok dengan database (`P2002 Unique Constraint`) dengan mengembalikan `409 Conflict`.
+
+### PATCH /users/me/profile
+- **Header**: `Authorization: Bearer <token>`
+- Upsert/Update field ekstensial di tabel terpisah `UserProfile`.
+
+### DELETE /users/me
+- **Header**: `Authorization: Bearer <token>`
+- Menerima JSON body `{ "password": "..." }`.
+- Validasi via `bcrypt` dan lalu hapus seluruh jejak identitas ke database (`prisma.user.delete`).
+
+### ENDPOINT GET-LIST WITH PAGINATION
+Gunakan offset `take` & `skip` dari query limit+page `?page=X&limit=Y` pada tabel-tabel terkait:
+- `GET /users/:username/followers` ➡️ Query table `Follow` relator `follower`
+- `GET /users/:username/following` ➡️ Query table `Follow` relator `following`
+- `GET /users/:username/posts` ➡️ Query table `Post` pengikatan `author` dengan urutan `desc` (`created_at`).
+
+### MENCARI PENGGUNA (GET `/users/search?q=XYZ`)
+- Pakai instrumen _Search string/contains_ Prisma untuk memanggil pencarian pada entitas `username` atau tabel relasi `profile.display_name`.
+
+---
+
+## 3. Langkah-Langkah Pengerjaan
+
+### Tahap 1: Sinkronisasi Database
+- Salin skema utuh ke `prisma/schema.prisma` seperti kode di atas.
+- Berikan sinkronisasi dan generate client Prisma.
+
+### Tahap 2: Helper Pagination (`src/utils/pagination.ts`)
+- Buat sebuah modul fungsi terpisah untuk membersihkan output kalkulasi halaman (page, total_pages dsb).
+
+### Tahap 3: Implementasi Layanan Bisnis (`src/services/user-service.ts`)
+- Buat 8-9 fungsi *Async Prisma Query* (mengambil Profil, Posts, Followers dll).
+- Tarik import properti unik baru sesuai format yang ditawarkan Prisma (seperti string filter pencarian, nested includes relasi Profile).
+
+### Tahap 4: Implementasi Controller Rute (`src/routes/user-route.ts`)
+- Sisipkan _Route Logic_ beserta _Middleware_, pastikan pola path yang berpotensi ditabrak (*conflict route wildcard*) tertata dari yang terbawah.
+  - `/me` (Terproteksi `authMiddleware`)
+  - `/me/profile` (Terproteksi `authMiddleware`)
+  - `/search`
+  - `/:username`
+  - `/:username/...`
+
+---
+
+## Acceptance Criteria
+
+- [ ] File Schema dirubah sempurna untuk membangkitkan entitas Database seperti Posts dan Follows.
+- [ ] Tersedia helper pagination output.
+- [ ] Fitur update profil membedakan entitas basis _Users_ vs sub-kolom _UserProfile_.
+- [ ] Rute dinamis tidak bertabrakan dengan statik route.
+- [ ] Validasi keamanan hapus account.
