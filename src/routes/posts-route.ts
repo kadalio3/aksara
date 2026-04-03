@@ -257,6 +257,10 @@ router.delete('/posts/:postId/reactions', authMiddleware, async (req: Request, r
       data: { love_count: result.love_count },
     });
   } catch (error: any) {
+    if (error.code === 'P2025') {
+      res.status(409).json({ success: false, error: { code: 'NOT_FOLLOWING', message: "Kamu tidak memberi love pada post ini" } });
+      return;
+    }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
@@ -274,6 +278,10 @@ router.post('/posts/:postId/replies/:replyId/reactions', authMiddleware, async (
       data: { love_count: result.love_count },
     });
   } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(409).json({ success: false, error: { code: 'ALREADY_REACTED', message: "Kamu sudah memberi love pada balasan ini" } });
+      return;
+    }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
@@ -291,6 +299,10 @@ router.delete('/posts/:postId/replies/:replyId/reactions', authMiddleware, async
       data: { love_count: result.love_count },
     });
   } catch (error: any) {
+    if (error.code === 'P2025') {
+      res.status(409).json({ success: false, error: { code: 'NOT_FOLLOWING', message: "Kamu tidak memberi love pada balasan ini" } });
+      return;
+    }
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Terjadi kesalahan sistem' } });
   }
 });
