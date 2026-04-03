@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { registerUser } from '../services/user-service';
+import { registerUser, loginUser } from '../services/user-service';
 
 const router = Router();
 
@@ -23,6 +23,28 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
     
+    res.status(500).json({ error: 'Terjadi kesalahan sistem' });
+  }
+});
+
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email dan password wajib diisi' });
+      return;
+    }
+
+    const token = await loginUser(email, password);
+
+    res.status(200).json({ data: token });
+  } catch (error: any) {
+    if (error.message === 'Email atau password salah') {
+      res.status(401).json({ error: error.message });
+      return;
+    }
+
     res.status(500).json({ error: 'Terjadi kesalahan sistem' });
   }
 });
