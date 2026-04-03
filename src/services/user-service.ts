@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -39,4 +40,41 @@ export const registerUser = async (username: string, email: string, password_str
   });
 
   return user;
+};
+
+export const loginUser = async (email: string, password_string: string) => {
+  // 1. Cari user berdasarkan email
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new Error('Email atau password salah');
+  }
+
+  // 2. Bandingkan password
+  const isValidPassword = await bcrypt.compare(password_string, user.password_hash);
+  
+  if (!isValidPassword) {
+    throw new Error('Email atau password salah');
+  }
+
+  // 3. Generate token sesi
+  const token = crypto.randomUUID();
+
+  // 4. Hitung masa kadaluarsa (7 hari dari sekarang)
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  // 5. Simpan sesi ke database
+  await prisma.session.create({
+    data: {
+      user_id: user.id,
+      token: token,
+      expires_at: expiresAt,
+      is_active: true,
+    },
+  });
+
+  return token;
 };

@@ -25,6 +25,23 @@ enum CommunityRole {
   admin
 }
 
+enum DeviceType {
+  mobile
+  tablet
+  desktop
+  unknown
+}
+
+enum ActivityAction {
+  login
+  logout
+  post_create
+  post_delete
+  follow
+  react
+  suspicious_login
+}
+
 model User {
   id              String            @id @default(uuid()) @db.VarChar(36)
   username        String            @unique @db.VarChar(50)
@@ -41,6 +58,10 @@ model User {
   UserProfile      UserProfile?
   CommunitiesOwned Community[]       @relation("CommunityOwner")
   CommunityMembers CommunityMember[]
+  Sessions         Session[]
+  Devices          Device[]
+  Locations        Location[]
+  ActivityLogs     ActivityLog[]
 
   @@map("users")
 }
@@ -96,4 +117,77 @@ model CommunityMember {
 
   @@unique([user_id, community_id])
   @@map("community_members")
+}
+
+model Session {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  user_id        String    @db.VarChar(36)
+  token          String    @unique @db.VarChar(500)
+  device_id      String?   @db.VarChar(36)
+  ip_address     String?   @db.VarChar(45)
+  is_active      Boolean   @default(true)
+  expires_at     DateTime  @db.Timestamp(0)
+  last_active_at DateTime  @default(now()) @db.Timestamp(0)
+  created_at     DateTime  @default(now()) @db.Timestamp(0)
+
+  User     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  Device   Device?   @relation(fields: [device_id], references: [id], onDelete: SetNull)
+  Locations Location[]
+  ActivityLogs ActivityLog[]
+
+  @@map("sessions")
+}
+
+model Device {
+  id            String     @id @default(uuid()) @db.VarChar(36)
+  user_id       String     @db.VarChar(36)
+  device_name   String?    @db.VarChar(100)
+  device_type   DeviceType @default(unknown)
+  os            String?    @db.VarChar(50)
+  browser       String?    @db.VarChar(50)
+  push_token    String?    @db.VarChar(500)
+  is_trusted    Boolean    @default(false)
+  last_login_at DateTime   @default(now()) @db.Timestamp(0)
+  created_at    DateTime   @default(now()) @db.Timestamp(0)
+
+  User      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  Sessions  Session[]
+
+  @@map("devices")
+}
+
+model Location {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  session_id    String   @db.VarChar(36)
+  user_id       String   @db.VarChar(36)
+  ip_address    String   @db.VarChar(45)
+  country       String?  @db.VarChar(100)
+  city          String?  @db.VarChar(100)
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  is_suspicious Boolean  @default(false)
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+
+  Session Session @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  User    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("locations")
+}
+
+model ActivityLog {
+  id           String         @id @default(uuid()) @db.VarChar(36)
+  user_id      String         @db.VarChar(36)
+  session_id   String?        @db.VarChar(36)
+  action       ActivityAction
+  content_type String?        @db.VarChar(50)
+  content_id   String?        @db.VarChar(36)
+  metadata     Json?
+  ip_address   String?        @db.VarChar(45)
+  created_at   DateTime       @default(now()) @db.Timestamp(0)
+
+  User    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  Session Session? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@index([created_at])
+  @@map("activity_logs")
 }
