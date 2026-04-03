@@ -124,6 +124,14 @@ export const deleteCommunity = async (slug: string, userId: string) => {
     const posts = await tx.communityPost.findMany({ where: { community_id: community.id } });
     const postIds = posts.map(p => p.id);
 
+    // Hapus Bookmarks untuk post komunnitas ini
+    await tx.bookmark.deleteMany({
+      where: {
+        content_type: 'community_post',
+        content_id: { in: postIds }
+      }
+    });
+
     await tx.communityReaction.deleteMany({
       where: { 
         OR: [
