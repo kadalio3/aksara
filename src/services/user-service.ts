@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
+import { recordActivityLog } from './activity-service';
 
 export const registerUser = async (username: string, email: string, password_string: string) => {
   // 1. Cek email unik
@@ -41,10 +42,17 @@ export const registerUser = async (username: string, email: string, password_str
     },
   });
 
+  // RECORD ACTIVITY
+  await recordActivityLog({
+    userId: user.id,
+    action: 'register',
+    metadata: { username: user.username }
+  });
+
   return user;
 };
 
-export const loginUser = async (email: string, password_string: string) => {
+export const loginUser = async (email: string, password_string: string, ipAddress?: string) => {
   // 1. Cari user berdasarkan email
   const user = await prisma.user.findUnique({
     where: { email },
@@ -73,13 +81,21 @@ export const loginUser = async (email: string, password_string: string) => {
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   // 5. Simpan sesi ke database
-  await prisma.session.create({
+  const session = await prisma.session.create({
     data: {
       user_id: user.id,
       token: token,
       expires_at: expiresAt,
       is_active: true,
     },
+  });
+
+  // RECORD ACTIVITY
+  await recordActivityLog({
+    userId: user.id,
+    sessionId: session.id,
+    action: 'login',
+    ipAddress: ipAddress
   });
 
   return token;

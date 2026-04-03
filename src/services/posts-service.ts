@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { createNotification } from './notifications-service';
+import { recordActivityLog } from './activity-service';
 import { PostType, PostReactionContentType, PostReactionType } from '@prisma/client';
 
 export const createPost = async (userId: string, content: string, type: PostType = 'text', media_urls: any = null) => {
@@ -28,6 +29,14 @@ export const createPost = async (userId: string, content: string, type: PostType
         },
       },
     },
+  });
+
+  // RECORD ACTIVITY
+  await recordActivityLog({
+    userId,
+    action: 'post_create',
+    contentType: 'post',
+    contentId: post.id
   });
 
   return post;
@@ -152,6 +161,14 @@ export const deletePost = async (userId: string, postId: string) => {
   await prisma.post.update({
     where: { id: postId },
     data: { is_deleted: true },
+  });
+
+  // RECORD ACTIVITY
+  await recordActivityLog({
+    userId,
+    action: 'post_delete',
+    contentType: 'post',
+    contentId: postId
   });
 };
 
