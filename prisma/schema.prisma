@@ -7,9 +7,348 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─────────────────────────────────────────────
-// ENUM DEFINITIONS
-// ─────────────────────────────────────────────
+model User {
+  id                     String               @id @default(uuid())
+  username               String               @unique @db.VarChar(50)
+  email                  String               @unique @db.VarChar(255)
+  password_hash          String               @db.VarChar(255)
+  is_verified            Boolean              @default(false)
+  is_private             Boolean              @default(false)
+  is_active              Boolean              @default(true)
+  follower_count         Int                  @default(0)
+  following_count        Int                  @default(0)
+  created_at             DateTime             @default(now())
+  updated_at             DateTime             @updatedAt
+  activity_logs          ActivityLog[]
+  bookmarks              Bookmark[]
+  owned_communities      Community[]          @relation("CommunityOwner")
+  community_memberships  CommunityMember[]
+  community_post_replies CommunityPostReply[]
+  community_posts        CommunityPost[]
+  community_reactions    CommunityReaction[]
+  devices                Device[]
+  following              Follow[]             @relation("Follower")
+  followers              Follow[]             @relation("Following")
+  locations              Location[]
+  received_messages      Message[]            @relation("MessageReceiver")
+  sent_messages          Message[]            @relation("MessageSender")
+  notifications_acted    Notification[]       @relation("NotificationActor")
+  notifications_received Notification[]       @relation("NotificationRecipient")
+  post_reactions         PostReaction[]
+  post_replies           PostReply[]
+  posts                  Post[]
+  sessions               Session[]
+  profile                UserProfile?
+
+  @@map("users")
+}
+
+model UserProfile {
+  id           String    @id @default(uuid())
+  user_id      String    @unique
+  display_name String?   @db.VarChar(100)
+  bio          String?   @db.Text
+  avatar_url   String?   @db.VarChar(500)
+  banner_url   String?   @db.VarChar(500)
+  website      String?   @db.VarChar(255)
+  location     String?   @db.VarChar(100)
+  birth_date   DateTime? @db.Date
+  gender       Gender?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Community {
+  id           String              @id @default(uuid())
+  owner_id     String
+  name         String              @db.VarChar(100)
+  slug         String              @unique @db.VarChar(100)
+  description  String?             @db.Text
+  avatar_url   String?             @db.VarChar(500)
+  banner_url   String?             @db.VarChar(500)
+  visibility   CommunityVisibility @default(public)
+  member_count Int                 @default(0)
+  post_count   Int                 @default(0)
+  created_at   DateTime            @default(now())
+  updated_at   DateTime            @updatedAt
+  owner        User                @relation("CommunityOwner", fields: [owner_id], references: [id])
+  members      CommunityMember[]
+  posts        CommunityPost[]
+
+  @@index([owner_id])
+  @@map("communities")
+}
+
+model CommunityMember {
+  id           String        @id @default(uuid())
+  user_id      String
+  community_id String
+  role         CommunityRole @default(member)
+  joined_at    DateTime      @default(now())
+  community    Community     @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, community_id])
+  @@index([community_id])
+  @@map("community_members")
+}
+
+model Post {
+  id           String      @id @default(uuid())
+  user_id      String
+  content      String      @db.Text
+  type         PostType    @default(text)
+  media_urls   String?     @db.LongText
+  love_count   Int         @default(0)
+  reply_count  Int         @default(0)
+  repost_count Int         @default(0)
+  is_deleted   Boolean     @default(false)
+  created_at   DateTime    @default(now())
+  updated_at   DateTime    @updatedAt
+  replies      PostReply[]
+  author       User        @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([created_at])
+  @@map("posts")
+}
+
+model PostReply {
+  id              String      @id @default(uuid())
+  post_id         String
+  user_id         String
+  parent_reply_id String?
+  content         String      @db.Text
+  media_urls      String?     @db.LongText
+  love_count      Int         @default(0)
+  is_deleted      Boolean     @default(false)
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+  parent_reply    PostReply?  @relation("ReplyNested", fields: [parent_reply_id], references: [id])
+  child_replies   PostReply[] @relation("ReplyNested")
+  post            Post        @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  author          User        @relation(fields: [user_id], references: [id])
+
+  @@index([post_id])
+  @@index([user_id])
+  @@index([parent_reply_id])
+  @@map("post_replies")
+}
+
+model CommunityPost {
+  id             String               @id @default(uuid())
+  user_id        String
+  community_id   String
+  content        String               @db.Text
+  type           CommunityPostType    @default(text)
+  media_urls     String?              @db.LongText
+  flair          String?              @db.VarChar(50)
+  upvote_count   Int                  @default(0)
+  downvote_count Int                  @default(0)
+  reply_count    Int                  @default(0)
+  is_deleted     Boolean              @default(false)
+  created_at     DateTime             @default(now())
+  updated_at     DateTime             @updatedAt
+  replies        CommunityPostReply[]
+  community      Community            @relation(fields: [community_id], references: [id])
+  author         User                 @relation(fields: [user_id], references: [id])
+
+  @@index([community_id])
+  @@index([user_id])
+  @@index([created_at])
+  @@map("community_posts")
+}
+
+model CommunityPostReply {
+  id                String               @id @default(uuid())
+  community_post_id String
+  user_id           String
+  parent_reply_id   String?
+  content           String               @db.Text
+  media_urls        String?              @db.LongText
+  upvote_count      Int                  @default(0)
+  downvote_count    Int                  @default(0)
+  is_deleted        Boolean              @default(false)
+  created_at        DateTime             @default(now())
+  updated_at        DateTime             @updatedAt
+  community_post    CommunityPost        @relation(fields: [community_post_id], references: [id], onDelete: Cascade)
+  parent_reply      CommunityPostReply?  @relation("CommunityReplyNested", fields: [parent_reply_id], references: [id])
+  child_replies     CommunityPostReply[] @relation("CommunityReplyNested")
+  author            User                 @relation(fields: [user_id], references: [id])
+
+  @@index([community_post_id])
+  @@index([user_id])
+  @@index([parent_reply_id])
+  @@map("community_post_replies")
+}
+
+model PostReaction {
+  id            String                  @id @default(uuid())
+  user_id       String
+  content_type  PostReactionContentType
+  content_id    String
+  reaction_type PostReactionType
+  created_at    DateTime                @default(now())
+  user          User                    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([content_type, content_id])
+  @@map("post_reactions")
+}
+
+model CommunityReaction {
+  id            String                       @id @default(uuid())
+  user_id       String
+  content_type  CommunityReactionContentType
+  content_id    String
+  reaction_type CommunityReactionType
+  created_at    DateTime                     @default(now())
+  user          User                         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@index([content_type, content_id])
+  @@map("community_reactions")
+}
+
+model Follow {
+  id           String   @id @default(uuid())
+  follower_id  String
+  following_id String
+  created_at   DateTime @default(now())
+  follower     User     @relation("Follower", fields: [follower_id], references: [id], onDelete: Cascade)
+  following    User     @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
+
+  @@unique([follower_id, following_id])
+  @@index([follower_id])
+  @@index([following_id])
+  @@map("follows")
+}
+
+model Bookmark {
+  id           String              @id @default(uuid())
+  user_id      String
+  content_type BookmarkContentType
+  content_id   String
+  created_at   DateTime            @default(now())
+  user         User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_type, content_id])
+  @@map("bookmarks")
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  sender_id   String
+  receiver_id String
+  content     String   @db.Text
+  media_url   String?  @db.VarChar(500)
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now())
+  receiver    User     @relation("MessageReceiver", fields: [receiver_id], references: [id])
+  sender      User     @relation("MessageSender", fields: [sender_id], references: [id])
+
+  @@index([sender_id, receiver_id])
+  @@index([receiver_id, is_read])
+  @@map("messages")
+}
+
+model Notification {
+  id            String                    @id @default(uuid())
+  recipient_id  String
+  actor_id      String
+  type          NotificationType
+  reaction_type NotificationReactionType?
+  content_type  NotificationContentType?
+  content_id    String?
+  is_read       Boolean                   @default(false)
+  created_at    DateTime                  @default(now())
+  actor         User                      @relation("NotificationActor", fields: [actor_id], references: [id], onDelete: Cascade)
+  recipient     User                      @relation("NotificationRecipient", fields: [recipient_id], references: [id], onDelete: Cascade)
+
+  @@index([recipient_id, is_read])
+  @@index([recipient_id, created_at])
+  @@index([actor_id], map: "notifications_actor_id_fkey")
+  @@map("notifications")
+}
+
+model Session {
+  id             String        @id @default(uuid())
+  user_id        String
+  token          String        @unique @db.VarChar(500)
+  device_id      String?
+  ip_address     String?       @db.VarChar(45)
+  is_active      Boolean       @default(true)
+  expires_at     DateTime
+  last_active_at DateTime      @default(now())
+  created_at     DateTime      @default(now())
+  activity_logs  ActivityLog[]
+  locations      Location[]
+  device         Device?       @relation(fields: [device_id], references: [id])
+  user           User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_active])
+  @@index([device_id], map: "sessions_device_id_fkey")
+  @@map("sessions")
+}
+
+model Device {
+  id            String     @id @default(uuid())
+  user_id       String
+  device_name   String?    @db.VarChar(100)
+  device_type   DeviceType @default(unknown)
+  os            String?    @db.VarChar(50)
+  browser       String?    @db.VarChar(50)
+  push_token    String?    @db.VarChar(500)
+  is_trusted    Boolean    @default(false)
+  last_login_at DateTime   @default(now())
+  created_at    DateTime   @default(now())
+  user          User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  sessions      Session[]
+
+  @@index([user_id])
+  @@map("devices")
+}
+
+model Location {
+  id            String   @id @default(uuid())
+  session_id    String
+  user_id       String
+  ip_address    String   @db.VarChar(45)
+  country       String?  @db.VarChar(100)
+  city          String?  @db.VarChar(100)
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  is_suspicious Boolean  @default(false)
+  created_at    DateTime @default(now())
+  session       Session  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@map("locations")
+}
+
+model ActivityLog {
+  id           String         @id @default(uuid())
+  user_id      String
+  session_id   String?
+  action       ActivityAction
+  content_type String?        @db.VarChar(50)
+  content_id   String?
+  metadata     String?        @db.LongText
+  ip_address   String?        @db.VarChar(45)
+  created_at   DateTime       @default(now())
+  session      Session?       @relation(fields: [session_id], references: [id])
+  user         User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([created_at])
+  @@index([session_id], map: "activity_logs_session_id_fkey")
+  @@map("activity_logs")
+}
 
 enum Gender {
   male
@@ -96,13 +435,11 @@ enum DeviceType {
 }
 
 enum ActivityAction {
-  // Auth
   login
   logout
   register
   password_change
   password_reset
-  // Konten
   post_create
   post_edit
   post_delete
@@ -111,413 +448,19 @@ enum ActivityAction {
   community_post_delete
   reply_create
   reply_delete
-  // Sosial
   follow
   unfollow
   react
   unreact
   bookmark
   unbookmark
-  // Komunitas
   community_create
   community_join
   community_leave
   member_promote
   member_kick
-  // Keamanan
   login_failed
   suspicious_login
   device_trusted
   session_revoked
-}
-
-// ─────────────────────────────────────────────
-// TABEL INTI
-// ─────────────────────────────────────────────
-
-model User {
-  id              String    @id @default(uuid())
-  username        String    @unique @db.VarChar(50)
-  email           String    @unique @db.VarChar(255)
-  password_hash   String    @db.VarChar(255)
-  is_verified     Boolean   @default(false)
-  is_private      Boolean   @default(false)
-  is_active       Boolean   @default(true)
-  follower_count  Int       @default(0)
-  following_count Int       @default(0)
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
-
-  // Relasi inti
-  profile               UserProfile?
-  owned_communities     Community[]         @relation("CommunityOwner")
-  community_memberships CommunityMember[]
-
-  // Relasi konten
-  posts                    Post[]
-  post_replies             PostReply[]
-  community_posts          CommunityPost[]
-  community_post_replies   CommunityPostReply[]
-
-  // Relasi sosial
-  post_reactions           PostReaction[]
-  community_reactions      CommunityReaction[]
-  bookmarks                Bookmark[]
-  sent_messages            Message[]           @relation("MessageSender")
-  received_messages        Message[]           @relation("MessageReceiver")
-  notifications_received   Notification[]      @relation("NotificationRecipient")
-  notifications_acted      Notification[]      @relation("NotificationActor")
-
-  // Relasi follow
-  followers   Follow[]  @relation("Following")
-  following   Follow[]  @relation("Follower")
-
-  // Relasi keamanan
-  sessions       Session[]
-  devices        Device[]
-  locations      Location[]
-  activity_logs  ActivityLog[]
-
-  @@map("users")
-}
-
-model UserProfile {
-  id           String    @id @default(uuid())
-  user_id      String    @unique
-  display_name String?   @db.VarChar(100)
-  bio          String?   @db.Text
-  avatar_url   String?   @db.VarChar(500)
-  banner_url   String?   @db.VarChar(500)
-  website      String?   @db.VarChar(255)
-  location     String?   @db.VarChar(100)
-  birth_date   DateTime? @db.Date
-  gender       Gender?
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@map("user_profiles")
-}
-
-model Community {
-  id           String              @id @default(uuid())
-  owner_id     String
-  name         String              @db.VarChar(100)
-  slug         String              @unique @db.VarChar(100)
-  description  String?             @db.Text
-  avatar_url   String?             @db.VarChar(500)
-  banner_url   String?             @db.VarChar(500)
-  visibility   CommunityVisibility @default(public)
-  member_count Int                 @default(0)
-  post_count   Int                 @default(0)
-  created_at   DateTime            @default(now())
-  updated_at   DateTime            @updatedAt
-
-  owner   User              @relation("CommunityOwner", fields: [owner_id], references: [id])
-  members CommunityMember[]
-  posts   CommunityPost[]
-
-  @@index([owner_id])
-  @@map("communities")
-}
-
-model CommunityMember {
-  id           String        @id @default(uuid())
-  user_id      String
-  community_id String
-  role         CommunityRole @default(member)
-  joined_at    DateTime      @default(now())
-
-  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  community Community @relation(fields: [community_id], references: [id], onDelete: Cascade)
-
-  @@unique([user_id, community_id])
-  @@index([community_id])
-  @@map("community_members")
-}
-
-// ─────────────────────────────────────────────
-// KONTEN TIMELINE PRIBADI
-// ─────────────────────────────────────────────
-
-model Post {
-  id            String   @id @default(uuid())
-  user_id       String
-  content       String   @db.Text
-  type          PostType @default(text)
-  media_urls    Json?
-  love_count    Int      @default(0)
-  reply_count   Int      @default(0)
-  repost_count  Int      @default(0)
-  is_deleted    Boolean  @default(false)
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-
-  author  User        @relation(fields: [user_id], references: [id])
-  replies PostReply[]
-
-  @@index([user_id])
-  @@index([created_at])
-  @@map("posts")
-}
-
-model PostReply {
-  id              String   @id @default(uuid())
-  post_id         String
-  user_id         String
-  parent_reply_id String?
-  content         String   @db.Text
-  media_urls      Json?
-  love_count      Int      @default(0)
-  is_deleted      Boolean  @default(false)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-
-  post         Post       @relation(fields: [post_id], references: [id], onDelete: Cascade)
-  author       User       @relation(fields: [user_id], references: [id])
-  parent_reply PostReply? @relation("ReplyNested", fields: [parent_reply_id], references: [id])
-  child_replies PostReply[] @relation("ReplyNested")
-
-  @@index([post_id])
-  @@index([user_id])
-  @@index([parent_reply_id])
-  @@map("post_replies")
-}
-
-// ─────────────────────────────────────────────
-// KONTEN KOMUNITAS
-// ─────────────────────────────────────────────
-
-model CommunityPost {
-  id              String            @id @default(uuid())
-  user_id         String
-  community_id    String
-  content         String            @db.Text
-  type            CommunityPostType @default(text)
-  media_urls      Json?
-  flair           String?           @db.VarChar(50)
-  upvote_count    Int               @default(0)
-  downvote_count  Int               @default(0)
-  reply_count     Int               @default(0)
-  is_deleted      Boolean           @default(false)
-  created_at      DateTime          @default(now())
-  updated_at      DateTime          @updatedAt
-
-  author    User                 @relation(fields: [user_id], references: [id])
-  community Community            @relation(fields: [community_id], references: [id])
-  replies   CommunityPostReply[]
-
-  @@index([community_id])
-  @@index([user_id])
-  @@index([created_at])
-  @@map("community_posts")
-}
-
-model CommunityPostReply {
-  id                String   @id @default(uuid())
-  community_post_id String
-  user_id           String
-  parent_reply_id   String?
-  content         String   @db.Text
-  media_urls        Json?
-  upvote_count      Int      @default(0)
-  downvote_count    Int      @default(0)
-  is_deleted        Boolean  @default(false)
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
-
-  community_post CommunityPost       @relation(fields: [community_post_id], references: [id], onDelete: Cascade)
-  author         User                @relation(fields: [user_id], references: [id])
-  parent_reply   CommunityPostReply? @relation("CommunityReplyNested", fields: [parent_reply_id], references: [id])
-  child_replies  CommunityPostReply[] @relation("CommunityReplyNested")
-
-  @@index([community_post_id])
-  @@index([user_id])
-  @@index([parent_reply_id])
-  @@map("community_post_replies")
-}
-
-// ─────────────────────────────────────────────
-// REAKSI
-// ─────────────────────────────────────────────
-
-model PostReaction {
-  id            String                  @id @default(uuid())
-  user_id       String
-  content_type  PostReactionContentType
-  content_id    String
-  reaction_type PostReactionType
-  created_at    DateTime                @default(now())
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@unique([user_id, content_type, content_id])
-  @@index([content_type, content_id])
-  @@map("post_reactions")
-}
-
-model CommunityReaction {
-  id            String                       @id @default(uuid())
-  user_id       String
-  content_type  CommunityReactionContentType
-  content_id    String
-  reaction_type CommunityReactionType
-  created_at    DateTime                     @default(now())
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@unique([user_id, content_type, content_id])
-  @@index([content_type, content_id])
-  @@map("community_reactions")
-}
-
-// ─────────────────────────────────────────────
-// SOSIAL
-// ─────────────────────────────────────────────
-
-model Follow {
-  id           String   @id @default(uuid())
-  follower_id  String
-  following_id String
-  created_at   DateTime @default(now())
-
-  follower  User @relation("Follower",  fields: [follower_id],  references: [id], onDelete: Cascade)
-  following User @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
-
-  @@unique([follower_id, following_id])
-  @@index([follower_id])
-  @@index([following_id])
-  @@map("follows")
-}
-
-model Bookmark {
-  id           String              @id @default(uuid())
-  user_id      String
-  content_type BookmarkContentType
-  content_id   String
-  created_at   DateTime            @default(now())
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@unique([user_id, content_type, content_id])
-  @@map("bookmarks")
-}
-
-model Message {
-  id          String   @id @default(uuid())
-  sender_id   String
-  receiver_id String
-  content     String   @db.Text
-  media_url   String?  @db.VarChar(500)
-  is_read     Boolean  @default(false)
-  created_at  DateTime @default(now())
-
-  sender   User @relation("MessageSender",   fields: [sender_id],   references: [id])
-  receiver User @relation("MessageReceiver", fields: [receiver_id], references: [id])
-
-  @@index([sender_id, receiver_id])
-  @@index([receiver_id, is_read])
-  @@map("messages")
-}
-
-model Notification {
-  id            String                    @id @default(uuid())
-  recipient_id  String
-  actor_id      String
-  type          NotificationType
-  reaction_type NotificationReactionType?
-  content_type  NotificationContentType?
-  content_id    String?
-  is_read       Boolean                   @default(false)
-  created_at    DateTime                  @default(now())
-
-  recipient User @relation("NotificationRecipient", fields: [recipient_id], references: [id], onDelete: Cascade)
-  actor     User @relation("NotificationActor",     fields: [actor_id],     references: [id], onDelete: Cascade)
-
-  @@index([recipient_id, is_read])
-  @@index([recipient_id, created_at])
-  @@map("notifications")
-}
-
-// ─────────────────────────────────────────────
-// KEAMANAN & AUDIT
-// ─────────────────────────────────────────────
-
-model Session {
-  id             String    @id @default(uuid())
-  user_id        String
-  token          String    @unique @db.VarChar(500)
-  device_id      String?
-  ip_address     String?   @db.VarChar(45)
-  is_active      Boolean   @default(true)
-  expires_at     DateTime
-  last_active_at DateTime  @default(now())
-  created_at     DateTime  @default(now())
-
-  user          User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  device        Device?       @relation(fields: [device_id], references: [id])
-  locations     Location[]
-  activity_logs ActivityLog[]
-
-  @@index([user_id, is_active])
-  @@map("sessions")
-}
-
-model Device {
-  id            String     @id @default(uuid())
-  user_id       String
-  device_name   String?    @db.VarChar(100)
-  device_type   DeviceType @default(unknown)
-  os            String?    @db.VarChar(50)
-  browser       String?    @db.VarChar(50)
-  push_token    String?    @db.VarChar(500)
-  is_trusted    Boolean    @default(false)
-  last_login_at DateTime   @default(now())
-  created_at    DateTime   @default(now())
-
-  user     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  sessions Session[]
-
-  @@index([user_id])
-  @@map("devices")
-}
-
-model Location {
-  id            String   @id @default(uuid())
-  session_id    String
-  user_id       String
-  ip_address    String   @db.VarChar(45)
-  country       String?  @db.VarChar(100)
-  city          String?  @db.VarChar(100)
-  latitude      Decimal? @db.Decimal(10, 7)
-  longitude     Decimal? @db.Decimal(10, 7)
-  is_suspicious Boolean  @default(false)
-  created_at    DateTime @default(now())
-
-  session Session @relation(fields: [session_id], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@index([session_id])
-  @@map("locations")
-}
-
-model ActivityLog {
-  id           String         @id @default(uuid())
-  user_id      String
-  session_id   String?
-  action       ActivityAction
-  content_type String?        @db.VarChar(50)
-  content_id   String?
-  metadata     Json?
-  ip_address   String?        @db.VarChar(45)
-  created_at   DateTime       @default(now())
-
-  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  session Session? @relation(fields: [session_id], references: [id])
-
-  @@index([user_id])
-  @@index([created_at])
-  @@map("activity_logs")
 }
