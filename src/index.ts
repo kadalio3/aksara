@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import userRouter from './routes/user-route';
 import followRouter from './routes/follow-route';
 import postsRouter from './routes/posts-route';
+import communitiesRouter from './routes/communities-route';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', userRouter);
 app.use('/api', followRouter);
 app.use('/api', postsRouter);
+app.use('/api', communitiesRouter);
 
 app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'Hello World' });
