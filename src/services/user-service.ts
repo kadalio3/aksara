@@ -78,3 +78,21 @@ export const loginUser = async (email: string, password_string: string) => {
 
   return token;
 };
+
+export const getCurrentUser = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      created_at: true,
+    },
+  });
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  return user;
+};
