@@ -325,3 +325,4 @@ export const logoutAllDevices = async (userId: string) => {
   });
   return result.count;
 };
+
