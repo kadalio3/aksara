@@ -168,8 +168,8 @@ router.delete('/users/me', authMiddleware, async (req: Request, res: Response) =
 router.get('/users/search', async (req: Request, res: Response) => {
   try {
     const q = req.query.q as string || '';
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
 
     const { users, total } = await searchUsers(q, page, limit);
     const pagination = getPaginationMetadata(total, page, limit);
@@ -197,8 +197,8 @@ router.get('/users/:username', async (req: Request, res: Response) => {
 router.get('/users/:username/followers', async (req: Request, res: Response) => {
   try {
     const { username } = req.params;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
 
     const { followers, total } = await getFollowers(username, page, limit);
     const pagination = getPaginationMetadata(total, page, limit);
@@ -212,8 +212,8 @@ router.get('/users/:username/followers', async (req: Request, res: Response) => 
 router.get('/users/:username/following', async (req: Request, res: Response) => {
   try {
     const { username } = req.params;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
 
     const { following, total } = await getFollowing(username, page, limit);
     const pagination = getPaginationMetadata(total, page, limit);
@@ -227,8 +227,8 @@ router.get('/users/:username/following', async (req: Request, res: Response) => 
 router.get('/users/:username/posts', async (req: Request, res: Response) => {
   try {
     const { username } = req.params;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
 
     const { posts, total } = await getUserPosts(username, page, limit);
     const pagination = getPaginationMetadata(total, page, limit);
