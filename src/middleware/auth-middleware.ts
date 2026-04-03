@@ -21,8 +21,9 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    // Mengikat ID milik user ke variable lokal
+    // Mengikat ID milik user & session ke variable lokal
     res.locals.userId = session.user_id;
+    res.locals.sessionId = session.id;
     res.locals.token = token;
 
     next();
