@@ -6,74 +6,65 @@ const prisma = new PrismaClient();
 // SERVICE: MESSAGES (DM)
 // ─────────────────────────────────────────────
 
-export const getInbox = async (userId: string) => {
-  // 1. Dapatkan daftar ID user yang pernah berinteraksi (sebagai pengirim atau penerima)
-  // Karena Prisma tidak punya DISTINCT ON, kita ambil semua lalu filter di JS atau pakai queryRaw
-  // Untuk kemudahan di lingkungan ini, kita ambil daftar distinct lawan bicara (partner)
+export const getInbox = async (userId: string, page: number = 1, limit: number = 20) => {
+  const offset = (page - 1) * limit;
+
+  // Query untuk mendapatkan daftar partner terakhir (latest message per partner) secara efisien
+  // Menggunakan Raw SQL untuk menghindari N+1 kueri pada list inbox
+  const results: any[] = await prisma.$queryRaw`
+    SELECT 
+      m.content, 
+      m.created_at, 
+      m.is_read,
+      u.id as partner_id,
+      u.username,
+      up.display_name,
+      up.avatar_url,
+      (SELECT COUNT(*) FROM messages WHERE receiver_id = ${userId} AND sender_id = u.id AND is_read = false) as unread_count
+    FROM messages m
+    JOIN (
+      SELECT 
+        CASE WHEN sender_id = ${userId} THEN receiver_id ELSE sender_id END as partner_id,
+        MAX(created_at) as latest_at
+      FROM messages
+      WHERE sender_id = ${userId} OR receiver_id = ${userId}
+      GROUP BY partner_id
+    ) latest ON 
+      ((m.sender_id = ${userId} AND m.receiver_id = latest.partner_id) OR (m.sender_id = latest.partner_id AND m.receiver_id = ${userId}))
+      AND m.created_at = latest.latest_at
+    JOIN users u ON u.id = latest.partner_id
+    LEFT JOIN user_profiles up ON up.user_id = latest.partner_id
+    ORDER BY latest.latest_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  // Hitung total percakapan unik untuk metadata paginasi
+  const totalResults: any[] = await prisma.$queryRaw`
+    SELECT COUNT(DISTINCT CASE WHEN sender_id = ${userId} THEN receiver_id ELSE sender_id END) as total
+    FROM messages
+    WHERE sender_id = ${userId} OR receiver_id = ${userId}
+  `;
   
-  const sentMessages = await prisma.message.findMany({
-    where: { sender_id: userId },
-    select: { receiver_id: true },
-    distinct: ['receiver_id'],
-  });
+  const total = Number(totalResults[0]?.total || 0);
 
-  const receivedMessages = await prisma.message.findMany({
-    where: { receiver_id: userId },
-    select: { sender_id: true },
-    distinct: ['sender_id'],
-  });
-
-  const partnerIds = Array.from(new Set([
-    ...sentMessages.map(m => m.receiver_id),
-    ...receivedMessages.map(m => m.sender_id)
-  ]));
-
-  // 2. Ambil detail inbox untuk setiap partner secara paralel
-  const inbox = await Promise.all(partnerIds.map(async (partnerId) => {
-    const [user, lastMessage, unreadCount] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: partnerId },
-        select: {
-          id: true,
-          username: true,
-          profile: { select: { display_name: true, avatar_url: true } }
-        }
-      }),
-      prisma.message.findFirst({
-        where: {
-          OR: [
-            { sender_id: userId, receiver_id: partnerId },
-            { sender_id: partnerId, receiver_id: userId }
-          ]
-        },
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.message.count({
-        where: {
-          sender_id: partnerId,
-          receiver_id: userId,
-          is_read: false
-        }
-      })
-    ]);
-
-    return {
-      user: user || { id: partnerId, username: 'Unknown User', profile: null },
-      last_message: lastMessage ? {
-        content: lastMessage.content,
-        created_at: lastMessage.created_at,
-        is_read: lastMessage.is_read
-      } : null,
-      unread_count: unreadCount
-    };
+  const inbox = results.map(row => ({
+    user: {
+      id: row.partner_id,
+      username: row.username,
+      profile: {
+        display_name: row.display_name,
+        avatar_url: row.avatar_url,
+      }
+    },
+    last_message: {
+      content: row.content,
+      created_at: row.created_at,
+      is_read: row.is_read === 1 || row.is_read === true,
+    },
+    unread_count: Number(row.unread_count)
   }));
 
-  // Urutkan inbox berdasarkan pesan terbaru
-  return inbox.sort((a, b) => {
-    const dateA = a.last_message?.created_at.getTime() || 0;
-    const dateB = b.last_message?.created_at.getTime() || 0;
-    return dateB - dateA;
-  });
+  return { inbox, total };
 };
 
 export const getChatHistory = async (userId: string, targetUserId: string, page: number = 1, limit: number = 30) => {
@@ -116,6 +107,7 @@ export const getChatHistory = async (userId: string, targetUserId: string, page:
 
 export const sendMessage = async (userId: string, targetUserId: string, data: { content: string; media_url?: string }) => {
   if (!data.content || data.content.trim().length === 0) throw new Error('Konten pesan tidak boleh kosong');
+  if (userId === targetUserId) throw new Error('SELF_DM_NOT_ALLOWED');
 
   const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!targetUser) throw new Error('Target user tidak ditemukan');
