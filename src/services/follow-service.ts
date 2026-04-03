@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma';
+import { createNotification } from './notifications-service';
 
 // ─────────────────────────────────────────────
 // SOCIAL FEATURES (FOLLOWS)
@@ -44,6 +45,13 @@ export const followUser = async (followerId: string, followingId: string) => {
       data: { following_count: { increment: 1 } },
     }),
   ]);
+
+  // KIRIM NOTIFIKASI
+  await createNotification({
+    recipient_id: followingId,
+    actor_id: followerId,
+    type: 'follow'
+  });
 };
 
 export const unfollowUser = async (followerId: string, followingId: string) => {

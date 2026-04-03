@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma';
+import { createNotification } from './notifications-service';
 import { PostType, PostReactionContentType, PostReactionType } from '@prisma/client';
 
 export const createPost = async (userId: string, content: string, type: PostType = 'text', media_urls: any = null) => {
@@ -259,6 +260,15 @@ export const createReply = async (userId: string, postId: string, content: strin
       data: { reply_count: { increment: 1 } },
     });
 
+    // KIRIM NOTIFIKASI
+    await createNotification({
+      recipient_id: post.user_id,
+      actor_id: userId,
+      type: 'reply',
+      content_type: 'post_reply',
+      content_id: reply.id
+    });
+
     return reply;
   });
 };
@@ -318,6 +328,17 @@ export const toggleLovePost = async (userId: string, postId: string) => {
         where: { id: postId },
         data: { love_count: { increment: 1 } },
       });
+
+      // KIRIM NOTIFIKASI
+      await createNotification({
+        recipient_id: post.user_id,
+        actor_id: userId,
+        type: 'reaction',
+        reaction_type: 'love',
+        content_type: 'post',
+        content_id: postId
+      });
+
       return { love_count: updated.love_count, is_loved: true };
     }
   });
@@ -353,6 +374,17 @@ export const toggleLoveReply = async (userId: string, replyId: string) => {
         where: { id: replyId },
         data: { love_count: { increment: 1 } },
       });
+
+      // KIRIM NOTIFIKASI
+      await createNotification({
+        recipient_id: reply.user_id,
+        actor_id: userId,
+        type: 'reaction',
+        reaction_type: 'love',
+        content_type: 'post_reply',
+        content_id: replyId
+      });
+
       return { love_count: updated.love_count, is_loved: true };
     }
   });
