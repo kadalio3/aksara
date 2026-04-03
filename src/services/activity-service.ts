@@ -5,6 +5,31 @@ import prisma from '../lib/prisma';
 // ─────────────────────────────────────────────
 
 /**
+ * Mencatat log aktivitas pengguna secara internal.
+ */
+export const recordActivityLog = async (data: {
+  userId: string;
+  sessionId?: string;
+  action: 'login' | 'logout' | 'register' | 'password_change' | 'password_reset' | 'post_create' | 'post_edit' | 'post_delete' | 'community_post_create' | 'community_post_edit' | 'community_post_delete' | 'reply_create' | 'reply_delete' | 'follow' | 'unfollow' | 'react' | 'unreact' | 'bookmark' | 'unbookmark' | 'community_create';
+  contentType?: string;
+  contentId?: string;
+  ipAddress?: string;
+  metadata?: any;
+}) => {
+  return await prisma.activityLog.create({
+    data: {
+      user_id: data.userId,
+      session_id: data.sessionId,
+      action: data.action as any,
+      content_type: data.contentType,
+      content_id: data.contentId,
+      ip_address: data.ipAddress,
+      metadata: data.metadata ? (typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata)) : null
+    } as any
+  });
+};
+
+/**
  * Mendapatkan daftar sesi aktif dengan penanda sesi saat ini (Current Session).
  */
 export const getSessions = async (userId: string, currentSessionId: string) => {

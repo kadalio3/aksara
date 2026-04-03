@@ -79,7 +79,8 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const token = await loginUser(email, password);
+    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+    const token = await loginUser(email, password, ipAddress);
 
     res.status(200).json({ success: true, data: token });
   } catch (error: any) {

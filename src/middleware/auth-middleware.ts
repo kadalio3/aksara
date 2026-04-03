@@ -26,6 +26,12 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     res.locals.sessionId = session.id;
     res.locals.token = token;
 
+    // Refresh last_active_at secara asinkron (tidak ditunggu/await) agar respon tetap cepat
+    prisma.session.update({
+      where: { id: session.id },
+      data: { last_active_at: new Date() }
+    }).catch(err => console.error('Gagal memperbarui last_active_at:', err));
+
     next();
   } catch (error) {
     res.status(500).json({ error: 'Terjadi kesalahan sistem' });
