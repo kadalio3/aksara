@@ -96,3 +96,16 @@ export const getCurrentUser = async (userId: string) => {
 
   return user;
 };
+
+export const logoutUser = async (token: string) => {
+  await prisma.session.delete({
+    where: { token },
+  });
+};
+
+export const logoutAllDevices = async (userId: string) => {
+  const result = await prisma.session.deleteMany({
+    where: { user_id: userId },
+  });
+  return result.count;
+};
